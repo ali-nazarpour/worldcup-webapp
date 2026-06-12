@@ -1,0 +1,52 @@
+services:
+  mongodb:
+    # AWS ECR Public mirror — use when Docker Hub is blocked (e.g. Iran)
+    image: public.ecr.aws/docker/library/mongo:7
+    container_name: worldcup-mongodb
+    restart: unless-stopped
+    volumes:
+      - mongodb_data:/data/db
+    # No host port — avoids conflict with other local MongoDB instances
+    expose:
+      - "27017"
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - worldcup-net
+
+  server:
+    build: ./server
+    container_name: worldcup-server
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MONGO_URI: mongodb://mongodb:27017/worldcup_predictions
+      CLIENT_URL: http://localhost:5173
+    ports:
+      - "5000:5000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - worldcup-net
+
+  client:
+    build: ./client
+    container_name: worldcup-client
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - server
+    networks:
+      - worldcup-net
+
+networks:
+  worldcup-net:
+    driver: bridge
+
+volumes:
+  mongodb_data:
